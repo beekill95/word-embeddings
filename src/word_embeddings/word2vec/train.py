@@ -4,6 +4,7 @@ from typing import Literal
 
 import torch
 from torch.utils.data import DataLoader
+from torcheval.metrics import MulticlassAccuracy
 from torchtext.data.utils import get_tokenizer
 from training_loop import TrainingLoop, SimpleTrainingStep
 
@@ -99,7 +100,12 @@ def train(
 
     loop = TrainingLoop(
         model,
-        step=SimpleTrainingStep(),
+        # TODO: parametrize these.
+        step=SimpleTrainingStep(
+            optimizer_fn=lambda params: torch.optim.Adam(params, lr=1e-3),
+            loss=torch.nn.CrossEntropyLoss(),
+            metrics=("accuracy", MulticlassAccuracy()),
+        ),
         device=device,
     )
     histories = loop.fit(
