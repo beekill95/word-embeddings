@@ -7,8 +7,8 @@ from torch.utils.data import DataLoader
 from torchtext.vocab import Vocab
 from training_loop import TrainingLoop, SimpleTrainingStep
 
-from .data import build_vocab, get_dataset
-from .word2vec import CBOW, SkipGram
+from ..data import build_vocab, get_dataset
+from .model import CBOW, SkipGram
 
 
 def convert_line_to_indices(tokenizer, vocab: Vocab, line: str):
