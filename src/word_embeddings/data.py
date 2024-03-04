@@ -43,10 +43,13 @@ def build_vocab(
     if special_tokens is None:
         special_tokens = ["<unk>"]
 
-    return build_vocab_from_iterator(
+    vocab = build_vocab_from_iterator(
         chain(tokenizer(line["text"]) for line in ds),
         min_freq=min_freq,
         special_first=True,
-        special_tokens=special_tokens,
+        specials=special_tokens,
         max_tokens=max_tokens,
     )
+    vocab.set_default_index(vocab["<unk>"])
+
+    return vocab

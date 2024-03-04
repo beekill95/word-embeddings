@@ -62,10 +62,10 @@ def train(
     epochs: int = 5,
 ):
     def convert_line_to_indices(line: str):
-        return vocab(tokenizer(line))
+        return {"text": vocab(tokenizer(line))}
 
     train_ds = get_dataset(dataset_name, "train")
-    val_ds = get_dataset(dataset_name, "val")
+    val_ds = get_dataset(dataset_name, "validation")
 
     # Build vocabulary.
     tokenizer = get_tokenizer("basic_english")
