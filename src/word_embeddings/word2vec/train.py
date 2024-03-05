@@ -13,7 +13,7 @@ from .model import CBOW, SkipGram
 
 
 def skipgram_collate(
-    lines: list[list[int]],
+    lines: list[dict[Literal["text"], torch.Tensor]],
     *,
     context_length: int,
     max_length: int = 0,
@@ -26,6 +26,8 @@ def skipgram_collate(
     context_window = 2 * context_length + 1
 
     for line in lines:
+        line = line["text"]
+
         if len(line) < context_window and skip_short_lines:
             continue
         elif (max_length > 0) and (len(line) > max_length):
@@ -40,8 +42,11 @@ def skipgram_collate(
         # and output words are every words in the context but not the input.
         # TODO: there might be a bug with skip_short_lines = False
         for idx in range(context_length, len(line) - context_length):
-            context_indices = (
-                line[idx - context_length : idx] + line[idx + 1 : idx + context_length]
+            context_indices = torch.concat(
+                (
+                    line[idx - context_length : idx],
+                    line[idx + 1 : idx + context_length],
+                )
             )
             inputs.extend([idx] * len(context_indices))
             outputs.extend(context_indices)
@@ -93,7 +98,7 @@ def train(
     val_dataloader = DataLoader(
         val_ds,
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=False,
         # TODO: Implement cbow collate.
         collate_fn=lambda lines: skipgram_collate(lines, context_length=5),
     )
@@ -102,7 +107,7 @@ def train(
         model,
         # TODO: parametrize these.
         step=SimpleTrainingStep(
-            optimizer_fn=lambda params: torch.optim.Adam(params, lr=1e-3),
+            optimizer_fn=lambda params: torch.optim.Adam(params, lr=1e-4),
             loss=torch.nn.CrossEntropyLoss(),
             metrics=("accuracy", MulticlassAccuracy()),
         ),
