@@ -65,6 +65,9 @@ def train(
     batch_size: int = 64,
     device: str = "cpu",
     epochs: int = 5,
+    num_data_workers: int = 0,
+    learning_rate: float = 1e-4,
+    context_length: int = 5,
 ):
     def convert_line_to_indices(line: str):
         return {"text": vocab(tokenizer(line))}
@@ -93,21 +96,23 @@ def train(
         batch_size=batch_size,
         shuffle=True,
         # TODO: Implement cbow collate.
-        collate_fn=lambda lines: skipgram_collate(lines, context_length=5),
+        collate_fn=lambda lines: skipgram_collate(lines, context_length=context_length),
+        num_workers=num_data_workers,
     )
     val_dataloader = DataLoader(
         val_ds,
         batch_size=batch_size,
         shuffle=False,
         # TODO: Implement cbow collate.
-        collate_fn=lambda lines: skipgram_collate(lines, context_length=5),
+        collate_fn=lambda lines: skipgram_collate(lines, context_length=context_length),
+        num_workers=num_data_workers,
     )
 
     loop = TrainingLoop(
         model,
         # TODO: parametrize these.
         step=SimpleTrainingStep(
-            optimizer_fn=lambda params: torch.optim.Adam(params, lr=1e-4),
+            optimizer_fn=lambda params: torch.optim.Adam(params, lr=learning_rate),
             loss=torch.nn.CrossEntropyLoss(),
             metrics=("accuracy", MulticlassAccuracy()),
         ),
