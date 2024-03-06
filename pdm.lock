@@ -5,7 +5,7 @@
 groups = ["default"]
 strategy = ["cross_platform"]
 lock_version = "4.4.1"
-content_hash = "sha256:cfe9fcb311c174a724d3d65366df7480ab339c23bed9275e910136e9d7ca6434"
+content_hash = "sha256:480de5423de47cd25eb698caf458f25fcb3ead916e1fad29c92358b3bebf39d6"
 
 [[package]]
 name = "aiohttp"
