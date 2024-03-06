@@ -16,6 +16,7 @@ def skipgram_collate(
     lines: list[dict[Literal["text"], torch.Tensor]],
     *,
     context_length: int,
+    vocab_size: int,
     max_length: int = 0,
     skip_short_lines: bool = True,
     randomly_truncate_long_lines: bool = True,
@@ -48,13 +49,26 @@ def skipgram_collate(
                     line[idx + 1 : idx + context_length],
                 )
             )
-            inputs.extend([idx] * len(context_indices))
-            outputs.extend(context_indices)
+            output = torch.zeros(vocab_size, dtype=torch.float)
+            output[context_indices] = 1.0
 
-    return (
+            inputs.append([idx])
+            outputs.append(output[None, ...])
+
+            # inputs.extend([idx] * len(context_indices))
+            # outputs.extend(context_indices)
+
+    results = (
         torch.tensor(inputs, dtype=torch.long),
-        torch.tensor(outputs, dtype=torch.long),
+        torch.concat(outputs, axis=0),
     )
+
+    return results
+
+    # return (
+    # torch.tensor(inputs, dtype=torch.long),
+    # torch.tensor(outputs, dtype=torch.long),
+    # )
 
 
 def train(
@@ -96,7 +110,11 @@ def train(
         batch_size=batch_size,
         shuffle=True,
         # TODO: Implement cbow collate.
-        collate_fn=lambda lines: skipgram_collate(lines, context_length=context_length),
+        collate_fn=lambda lines: skipgram_collate(
+            lines,
+            vocab_size=len(vocab),
+            context_length=context_length,
+        ),
         num_workers=num_data_workers,
     )
     val_dataloader = DataLoader(
@@ -104,7 +122,11 @@ def train(
         batch_size=batch_size,
         shuffle=False,
         # TODO: Implement cbow collate.
-        collate_fn=lambda lines: skipgram_collate(lines, context_length=context_length),
+        collate_fn=lambda lines: skipgram_collate(
+            lines,
+            vocab_size=len(vocab),
+            context_length=context_length,
+        ),
         num_workers=num_data_workers,
     )
 
@@ -113,7 +135,8 @@ def train(
         # TODO: parametrize these.
         step=SimpleTrainingStep(
             optimizer_fn=lambda params: torch.optim.Adam(params, lr=learning_rate),
-            loss=torch.nn.CrossEntropyLoss(),
+            # loss=torch.nn.CrossEntropyLoss(),
+            loss=torch.nn.MultiLabelSoftMarginLoss(),
             metrics=("accuracy", MulticlassAccuracy()),
         ),
         device=device,
