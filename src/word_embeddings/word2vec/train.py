@@ -4,11 +4,11 @@ from typing import Literal
 
 import torch
 from torch.utils.data import DataLoader
-from torcheval.metrics import MulticlassAccuracy
 from torchtext.data.utils import get_tokenizer
 from training_loop import TrainingLoop, SimpleTrainingStep
 
 from ..data import build_vocab, get_dataset
+from ..metrics import TopKMultilabelAccuracy
 from .model import CBOW, SkipGram
 
 
@@ -137,7 +137,7 @@ def train(
             optimizer_fn=lambda params: torch.optim.Adam(params, lr=learning_rate),
             # loss=torch.nn.CrossEntropyLoss(),
             loss=torch.nn.MultiLabelSoftMarginLoss(),
-            metrics=("accuracy", MulticlassAccuracy()),
+            metrics=("accuracy", TopKMultilabelAccuracy(threshold=0.0)),
         ),
         device=device,
     )
