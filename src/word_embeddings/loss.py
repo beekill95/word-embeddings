@@ -42,4 +42,4 @@ class MultiLabelSoftMarginLoss(nn.Module):
                 torch.log(negative_pred)
             )
 
-        return loss / batch_size
+        return -loss / batch_size
