@@ -8,6 +8,7 @@ from torchtext.data.utils import get_tokenizer
 from training_loop import TrainingLoop, SimpleTrainingStep
 
 from ..data import build_vocab, get_dataset
+from ..loss import MultiLabelSoftMarginLoss
 from ..metrics import TopKMultilabelAccuracy
 from .model import CBOW, SkipGram
 
@@ -49,18 +50,16 @@ def skipgram_collate(
                     line[idx + 1 : idx + context_length],
                 )
             )
-            output = torch.zeros(vocab_size, dtype=torch.float)
-            output[context_indices] = 1.0
 
             inputs.append([idx])
-            outputs.append(output[None, ...])
+            outputs.append(context_indices[None, ...])
 
             # inputs.extend([idx] * len(context_indices))
             # outputs.extend(context_indices)
 
     results = (
         torch.tensor(inputs, dtype=torch.long),
-        torch.concat(outputs, axis=0),
+        torch.concat(outputs, axis=0).to(torch.long),
     )
 
     return results
@@ -92,15 +91,16 @@ def train(
     # Build vocabulary.
     tokenizer = get_tokenizer("basic_english")
     vocab = build_vocab(train_ds, tokenizer=tokenizer)
+    nb_tokens = len(vocab)
 
     # Convert strings to indices.
     train_ds = train_ds.map(lambda line: convert_line_to_indices(line["text"]))
     val_ds = val_ds.map(lambda line: convert_line_to_indices(line["text"]))
 
     if model_type == "skip-gram":
-        model = SkipGram(len(vocab), embedding_size)
+        model = SkipGram(nb_tokens, embedding_size)
     elif model_type == "cbow":
-        model = CBOW(len(vocab), embedding_size)
+        model = CBOW(nb_tokens, embedding_size)
     else:
         raise ValueError(f"Unsupported model type: {model_type}")
 
@@ -136,7 +136,7 @@ def train(
         step=SimpleTrainingStep(
             optimizer_fn=lambda params: torch.optim.Adam(params, lr=learning_rate),
             # loss=torch.nn.CrossEntropyLoss(),
-            loss=torch.nn.MultiLabelSoftMarginLoss(),
+            loss=MultiLabelSoftMarginLoss(num_classes=nb_tokens, logits=True),
             metrics=("accuracy", TopKMultilabelAccuracy(threshold=0.0)),
         ),
         device=device,

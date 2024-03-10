@@ -65,13 +65,14 @@ class TopKMultilabelAccuracy(Metric[torch.Tensor]):
         ypred: torch.Tensor,
         ytrue: torch.Tensor,
         threshold: float,
-    ) -> tuple[int, int]:
-        intersection = 0
-        union = 0
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        intersection = torch.tensor(0, dtype=torch.float, device=ypred.device)
+        union = torch.tensor(0, dtype=torch.float, device=ytrue.device)
 
         for i in range(ypred.shape[0]):
             true = ytrue[i]
-            pred = torch.nonzero(ypred[i] > threshold).squeeze()
+            # FIXME: check model's output shape
+            pred = torch.nonzero(ypred[i].squeeze() > threshold).squeeze()
 
             unique_indices, indices_count = torch.unique(
                 torch.concat((true, pred)),
