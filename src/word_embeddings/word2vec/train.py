@@ -9,6 +9,7 @@ from torchtext.data.utils import get_tokenizer
 from training_loop import TrainingLoop, SimpleTrainingStep
 
 from ..data import build_vocab, get_dataset
+from ..loss import MultiLabelSoftMarginLoss
 from .model import CBOW, SkipGram
 
 
@@ -57,6 +58,56 @@ def skipgram_collate(
     )
 
 
+def skipgram_collate_multilabel(
+    lines: list[dict[Literal["text"], torch.Tensor]],
+    *,
+    context_length: int,
+    vocab_size: int,
+    max_length: int = 0,
+    skip_short_lines: bool = True,
+    randomly_truncate_long_lines: bool = True,
+) -> tuple[torch.LongTensor, torch.BoolTensor]:
+    inputs = []
+    outputs = []
+
+    context_window = 2 * context_length + 1
+
+    for line in lines:
+        line = line["text"]
+
+        if len(line) < context_window and skip_short_lines:
+            continue
+        elif (max_length > 0) and (len(line) > max_length):
+            if randomly_truncate_long_lines:
+                # TODO
+                idx = torch.randint(0, len(line) - max_length)
+
+            # Truncate line to max length.
+            line = line[idx : idx + max_length]
+
+        # Create input & output words, with input word at the center of the window,
+        # and output words are every words in the context but not the input.
+        # TODO: there might be a bug with skip_short_lines = False
+        for idx in range(context_length, len(line) - context_length):
+            context_indices = torch.concat(
+                (
+                    line[idx - context_length : idx],
+                    line[idx + 1 : idx + context_length],
+                )
+            )
+            inputs.extend([idx])
+
+            output = torch.zeros((1, vocab_size), dtype=torch.bool)
+            output[0, context_indices] = True
+
+            outputs.append(output)
+
+    return (
+        torch.tensor(inputs, dtype=torch.long),
+        torch.concat(outputs, axis=0),
+    )
+
+
 def train(
     model_type: Literal["skip-gram", "cbow"],
     *,
@@ -78,15 +129,16 @@ def train(
     # Build vocabulary.
     tokenizer = get_tokenizer("basic_english")
     vocab = build_vocab(train_ds, tokenizer=tokenizer)
+    vocab_size = len(vocab)
 
     # Convert strings to indices.
     train_ds = train_ds.map(lambda line: convert_line_to_indices(line["text"]))
     val_ds = val_ds.map(lambda line: convert_line_to_indices(line["text"]))
 
     if model_type == "skip-gram":
-        model = SkipGram(len(vocab), embedding_size)
+        model = SkipGram(vocab_size, embedding_size)
     elif model_type == "cbow":
-        model = CBOW(len(vocab), embedding_size)
+        model = CBOW(vocab_size, embedding_size)
     else:
         raise ValueError(f"Unsupported model type: {model_type}")
 
@@ -96,7 +148,11 @@ def train(
         batch_size=batch_size,
         shuffle=True,
         # TODO: Implement cbow collate.
-        collate_fn=lambda lines: skipgram_collate(lines, context_length=context_length),
+        collate_fn=lambda lines: skipgram_collate_multilabel(
+            lines,
+            context_length=context_length,
+            vocab_size=vocab_size,
+        ),
         num_workers=num_data_workers,
     )
     val_dataloader = DataLoader(
@@ -104,7 +160,11 @@ def train(
         batch_size=batch_size,
         shuffle=False,
         # TODO: Implement cbow collate.
-        collate_fn=lambda lines: skipgram_collate(lines, context_length=context_length),
+        collate_fn=lambda lines: skipgram_collate(
+            lines,
+            context_length=context_length,
+            vocab_size=vocab_size,
+        ),
         num_workers=num_data_workers,
     )
 
@@ -113,8 +173,9 @@ def train(
         # TODO: parametrize these.
         step=SimpleTrainingStep(
             optimizer_fn=lambda params: torch.optim.Adam(params, lr=learning_rate),
-            loss=torch.nn.CrossEntropyLoss(),
-            metrics=("accuracy", MulticlassAccuracy()),
+            # loss=torch.nn.CrossEntropyLoss(),
+            loss=MultiLabelSoftMarginLoss(logits=True),
+            # metrics=("accuracy", MulticlassAccuracy()),
         ),
         device=device,
     )
