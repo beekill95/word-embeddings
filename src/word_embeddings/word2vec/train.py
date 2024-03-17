@@ -7,6 +7,8 @@ from torch.utils.data import DataLoader
 from torcheval.metrics import MulticlassAccuracy
 from torchtext.data.utils import get_tokenizer
 from training_loop import TrainingLoop, SimpleTrainingStep
+from training_loop.callbacks import EarlyStopping
+
 
 from ..data import build_vocab, get_dataset
 from .model import CBOW, SkipGram
@@ -68,6 +70,7 @@ def train(
     num_data_workers: int = 0,
     learning_rate: float = 1e-4,
     context_length: int = 5,
+    early_stopping_patience: int = 10,
 ):
     def convert_line_to_indices(line: str):
         return {"text": vocab(tokenizer(line))}
@@ -78,15 +81,16 @@ def train(
     # Build vocabulary.
     tokenizer = get_tokenizer("basic_english")
     vocab = build_vocab(train_ds, tokenizer=tokenizer)
+    vocab_size = len(vocab)
 
     # Convert strings to indices.
     train_ds = train_ds.map(lambda line: convert_line_to_indices(line["text"]))
     val_ds = val_ds.map(lambda line: convert_line_to_indices(line["text"]))
 
     if model_type == "skip-gram":
-        model = SkipGram(len(vocab), embedding_size)
+        model = SkipGram(vocab_size, embedding_size)
     elif model_type == "cbow":
-        model = CBOW(len(vocab), embedding_size)
+        model = CBOW(vocab_size, embedding_size)
     else:
         raise ValueError(f"Unsupported model type: {model_type}")
 
@@ -114,7 +118,13 @@ def train(
         step=SimpleTrainingStep(
             optimizer_fn=lambda params: torch.optim.Adam(params, lr=learning_rate),
             loss=torch.nn.CrossEntropyLoss(),
-            metrics=("accuracy", MulticlassAccuracy()),
+            metrics=(
+                "accuracy",
+                MulticlassAccuracy(
+                    num_classes=vocab_size,
+                    k=2 * context_length,
+                ),
+            ),
         ),
         device=device,
     )
@@ -122,6 +132,14 @@ def train(
         train_dataloader,
         val_dataloader,
         epochs=epochs,
+        callbacks=[
+            EarlyStopping(
+                monitor="val_accuracy",
+                mode="max",
+                patience=early_stopping_patience,
+                restore_best_weights=True,
+            )
+        ],
     )
 
     return {"model": model, "vocab": vocab}, *histories
